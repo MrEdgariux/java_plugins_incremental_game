@@ -1,0 +1,7 @@
+name: IncrementalGame
+version: '1.0'
+main: lt.mredgariux.incrementalGame.main
+api-version: '1.21'
+commands:
+  upgrades:
+    description: aha
