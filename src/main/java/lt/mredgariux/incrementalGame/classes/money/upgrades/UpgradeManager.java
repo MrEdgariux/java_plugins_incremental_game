@@ -1,6 +1,8 @@
 package lt.mredgariux.incrementalGame.classes.money.upgrades;
 
+import lt.mredgariux.incrementalGame.classes.LargeNumbers;
 import lt.mredgariux.incrementalGame.classes.PlayerData;
+import org.bukkit.Bukkit;
 
 import java.lang.instrument.IllegalClassFormatException;
 import java.util.ArrayList;
@@ -13,10 +15,11 @@ public class UpgradeManager {
     private List<Upgrade> upgrades = new ArrayList<>();
 
     public UpgradeManager() {
-        UpgradeOptions upgradeOptions = new UpgradeOptions();
-        upgradeOptions.moneyIncrementalMultiplier = 2;
+        this.upgrades = new ArrayList<>();
+    }
 
-        this.upgrades.add(new Upgrade("Money I", "Increases your earnings by x2", 10, upgradeOptions));
+    public void loadUpgrades(List<Upgrade> upgradess) {
+        this.upgrades.addAll(upgradess);
     }
 
     public List<Upgrade> getUpgrades() {
@@ -73,9 +76,9 @@ public class UpgradeManager {
                 return new UpgradeResult(userUpgrade, false, "Upgrade is at maximum, disabled or unknown error occurred");
             }
 
-            double price = userUpgrade.getPrice();
+            LargeNumbers price = userUpgrade.getPrice();
 
-            if (price <= 0) {
+            if (price.compareTo(new LargeNumbers(0,0)) <= 0) {
                 return new UpgradeResult(userUpgrade, false, "Upgrade price is incorrect");
             }
 
@@ -84,17 +87,23 @@ public class UpgradeManager {
                 amount = possibleAmount;
             }
 
+            if (amount == 0) {
+                return new UpgradeResult(userUpgrade, false, "Not enough money");
+            }
+
             for (int i = 0; i < amount; i++) {
                 if (!userUpgrade.canBeUpgraded()) {
                     return new UpgradeResult(userUpgrade, false, "Upgrade is at maximum level.");
                 }
 
-                if (playerData.getMoney() >= price) {
+                int results = playerData.getMoney().compareTo(price);
+
+                if (results >= 0) {
                     playerData.removeMoney(price);
                     userUpgrade.increaseLevel();
                     userUpgrade.increaseUpgradePrice();
                 } else {
-                    return new UpgradeResult(userUpgrade, false, "Not enough money");
+                    break;
                 }
             }
 
@@ -107,8 +116,8 @@ public class UpgradeManager {
                 return new UpgradeResult(newUpgrade, false, "Upgrade is at maximum, disabled or unknown error occurred");
             }
 
-            double price = newUpgrade.getPrice();
-            if (price <= 0) {
+            LargeNumbers price = newUpgrade.getPrice();
+            if (price.compareTo(new LargeNumbers(0,0)) <= 0) {
                 return new UpgradeResult(newUpgrade, false, "Upgrade price is incorrect");
             }
 
@@ -117,12 +126,16 @@ public class UpgradeManager {
                 amount = possibleAmount;
             }
 
+            if (amount == 0) {
+                return new UpgradeResult(newUpgrade, false, "Not enough money");
+            }
+
             for (int i = 0; i < amount; i++) {
                 if (!newUpgrade.canBeUpgraded()) {
                     return new UpgradeResult(newUpgrade, false, "Upgrade cannot be upgraded.");
                 }
 
-                if (playerData.getMoney() >= price) {
+                if (playerData.getMoney().compareTo(price) >= 0) {
                     playerData.removeMoney(price);
                     newUpgrade.increaseLevel();
                     newUpgrade.increaseUpgradePrice();
@@ -137,16 +150,28 @@ public class UpgradeManager {
     }
 
     public int getPossibleUpgradeAmount(Upgrade upgrade, PlayerData playerData) {
-        double playerMoney = playerData.getMoney();
-        double upgradePrice = upgrade.getPrice();
-        int maxAmount = 0;
+        LargeNumbers playerMoney = new LargeNumbers(playerData.getMoney());
+        LargeNumbers upgradePrice = new LargeNumbers(upgrade.getPrice());
+        double multiplier = upgrade.getUpgradeCostMultiplier();
 
-        while (playerMoney >= upgradePrice) {
-            maxAmount++;
-            playerMoney -= upgradePrice; // Sumokam už upgrade
-            upgradePrice *= upgrade.getUpgradeCostMultiplier(); // Padidinam kainą pagal augimo faktorių
+        if (playerMoney.compareTo(upgradePrice) < 0) {
+            return 0; // Neturim pinigų net pirmai upgrade
         }
 
-        return maxAmount;
+        if (multiplier == 1.0) {
+            return Integer.MAX_VALUE; // Jei nėra kainos augimo, galima pirkti be ribojimų
+        }
+
+        int maxUpgrades = 0;
+
+        while (playerMoney.compareTo(upgradePrice) >= 0) {
+            maxUpgrades++;
+            playerMoney.subtract(upgradePrice);
+            upgradePrice.multiply(multiplier);
+        }
+
+        return maxUpgrades;
     }
+
+
 }

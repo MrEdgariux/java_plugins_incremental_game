@@ -1,13 +1,15 @@
 package lt.mredgariux.incrementalGame;
 
+import lt.mredgariux.incrementalGame.classes.LargeNumbers;
 import lt.mredgariux.incrementalGame.classes.PlayerData;
 import lt.mredgariux.incrementalGame.classes.money.upgrades.Upgrade;
-import lt.mredgariux.incrementalGame.classes.money.upgrades.UpgradeManager;
+import lt.mredgariux.incrementalGame.classes.money.upgrades.UpgradeOptions;
 import lt.mredgariux.incrementalGame.commands.incrementalUpgradeCommand;
 import lt.mredgariux.incrementalGame.events.UpdateSignEvent;
 import lt.mredgariux.incrementalGame.utils.BasicFunctions;
 import lt.mredgariux.incrementalGame.utils.ChatManager;
 import lt.mredgariux.incrementalGame.utils.PacketManager;
+import lt.mredgariux.incrementalGame.utils.UpgradesFunction;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
@@ -31,10 +33,46 @@ public final class main extends JavaPlugin implements Listener {
 
     PacketManager packetManager = new PacketManager();
 
-    private final UpgradeManager upgradeManager = new UpgradeManager();
+    MongoDBDatabase mongoDb;
+
+    UpgradesFunction upgradesFunction = new UpgradesFunction();
 
     @Override
     public void onEnable() {
+        saveDefaultConfig();
+
+        try {
+            mongoDb = new MongoDBDatabase();
+            mongoDb.connect();
+            // Main of the document creations xD
+            mongoDb.createUpgrade(new Upgrade.Builder("Money I", "Gives 2x money", new LargeNumbers(10,0), new UpgradeOptions.Builder()
+                    .setMoneyIncrementalMultiplier(2)
+                    .build()
+            ).build());
+
+            mongoDb.createUpgrade(new Upgrade.Builder("Money II", "Adds 2x money exponent", new LargeNumbers(2.5,1), new UpgradeOptions.Builder()
+                    .setMoneyExponentalMultiplier(1)
+                    .build()
+            ).build());
+
+            // Coming soon upgrades
+
+            mongoDb.createUpgrade(new Upgrade.Builder("Hole in the money", "Sacrifices the money to generate coal", new LargeNumbers(1,306), new UpgradeOptions.Builder()
+                    .setMoneyExponentalMultiplier(1)
+                    .build()
+            ).setUpgradeLevelMax(0).build());
+
+            mongoDb.createUpgrade(new Upgrade.Builder("Coal generator I", "Burns coal to generate even more money", new LargeNumbers(1,306), new UpgradeOptions.Builder()
+                    .setMoneyExponentalMultiplier(1)
+                    .build()
+            ).setUpgradeLevelMax(0).build());
+
+            upgradesFunction.getUpgradeManager().loadUpgrades(mongoDb.loadUpgrades());
+        } catch (Exception e) {
+            getLogger().severe("MongoDB connection failed. " + e.getMessage());
+            this.getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new UpdateSignEvent(), this);
@@ -52,9 +90,11 @@ public final class main extends JavaPlugin implements Listener {
         while (iterator.hasNext()) {
             PlayerData data = iterator.next();
             endUser(data);
-            ChatManager.sendMessage(data.getPlayer(), "&cGame was temporarily paused. (Reason: PLUGIN-RELOAD)");
+            ChatManager.sendMessage(data.getPlayer(), "&cGame paused (&6Caused by: &nPLUGIN_RELOAD&c)");
             iterator.remove(); // Saugiai pašalina elementą
         }
+
+        mongoDb.disconnect();
     }
 
     @EventHandler
@@ -77,11 +117,14 @@ public final class main extends JavaPlugin implements Listener {
      * @param player - Player which will be starting incremental game on
      */
     public void startUser(Player player) {
-        PlayerData playerData = new PlayerData(player);
+        PlayerData loadedPlayerData = mongoDb.loadFromDatabase(player);
+
+        PlayerData playerData;
+        playerData = Objects.requireNonNullElseGet(loadedPlayerData, () -> new PlayerData(player));
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(this, () -> {
             try {
-                playerData.increaseMoney(); // Fixed will be in future
+                playerData.increaseMoney();
 
                 BossBar existingBossBar = null;
                 for (BossBar bossBar : player.activeBossBars()) {
@@ -90,18 +133,20 @@ public final class main extends JavaPlugin implements Listener {
                 }
 
                 if (existingBossBar != null) {
-                    existingBossBar.name(ChatManager.decodeLegacyMessage("&cBalance: " + BasicFunctions.format(playerData.getMoney())));
+                    existingBossBar.name(ChatManager.decodeLegacyMessage("&cBalance: " + playerData.getMoney().toString()));
                 } else {
-                    BossBar newBossBar = BossBar.bossBar(ChatManager.decodeLegacyMessage("&cBalance: " + BasicFunctions.format(playerData.getMoney())), 1, BossBar.Color.GREEN, BossBar.Overlay.PROGRESS);
+                    BossBar newBossBar = BossBar.bossBar(ChatManager.decodeLegacyMessage("&cBalance: " + playerData.getMoney().toString()), 1, BossBar.Color.GREEN, BossBar.Overlay.PROGRESS);
                     player.showBossBar(newBossBar);
                 }
 
                 Location l = new Location(Bukkit.getWorld("world"), 18,85,7);
-                packetManager.updateSign(l, playerData, "Balance", "", BasicFunctions.format(playerData.getMoney()));
-
+                packetManager.updateSign(l, playerData, "Balance", "", playerData.getMoney().toString());
                 l = new Location(Bukkit.getWorld("world"), 17,85,7);
-                Upgrade upgrade = upgradeManager.getUpgradesForPlayer(playerData).getFirst();
-                packetManager.updateSign(l, playerData, upgrade.getName(), BasicFunctions.format(upgrade.getPrice()), BasicFunctions.format(upgrade.getLevel()), BasicFunctions.format(upgradeManager.getPossibleUpgradeAmount(upgrade, playerData)));
+
+                for (Upgrade upgrade : upgradesFunction.getUpgradeManager().getUpgradesForPlayer(playerData)){
+                    packetManager.updateSign(l, playerData, upgrade.getName(), upgrade.getPrice().toString(), String.valueOf(upgrade.getLevel()), String.valueOf(upgradesFunction.getUpgradeManager().getPossibleUpgradeAmount(upgrade, playerData)));
+                    l.subtract(1,0,0);
+                }
 
             } catch (Exception e) {
                 getLogger().severe("Error: " + e.getMessage() + " from user " + player.getName() + " (UUID: " + player.getUniqueId() + ")" );
@@ -126,5 +171,6 @@ public final class main extends JavaPlugin implements Listener {
             p.hideBossBar(b);
         }
         playerDataList.remove(playerData.getPlayer().getUniqueId());
+        mongoDb.saveToDatabase(playerData);
     }
 }
