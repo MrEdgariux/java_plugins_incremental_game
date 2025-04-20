@@ -70,7 +70,7 @@ public class MongoDBDatabase {
 
         PlayerData playerData = new PlayerData(player);
 
-        boolean success = playerData.load(docData);
+        boolean success = playerData.load(docData, loadUpgrades());
         if (success) {
             plugin.getLogger().info("[MongoDB] Player data loaded: " + player.getName());
         } else {
@@ -88,8 +88,9 @@ public class MongoDBDatabase {
             try {
                 String upgradeName = doc.getString("name");
                 String upgradeDescription = doc.getString("description");
-                int limit = doc.getInteger("limit");
+                long limit = doc.getLong("limit");
                 double costMultiplier = doc.getDouble("costMultiplier");
+                double costMultiplieradder = doc.getDouble("costMultiplierAdder");
 
                 Document priceDoc = (Document) doc.get("price");
                 LargeNumbers upgradePrice = new LargeNumbers(priceDoc.getDouble("mantisa"), priceDoc.getLong("exponent"));
@@ -99,6 +100,7 @@ public class MongoDBDatabase {
                 Upgrade upgrade = new Upgrade.Builder(upgradeName, upgradeDescription, upgradePrice, upgradeOptions)
                         .setUpgradeLevelMax(limit)
                         .setUpgradeCostMultiplier(costMultiplier)
+                        .setUpgradeCostMultiplierAdder(costMultiplieradder)
                         .build();
 
                 upgrades.add(upgrade);
@@ -111,6 +113,10 @@ public class MongoDBDatabase {
     }
 
     public void createUpgrade(Upgrade upgrade) {
+        if (upgradesCollection.find(Filters.eq("id", upgrade.getId())).first() != null) {
+            updateUpgrade(upgrade);
+            return;
+        }
         try {
             Document upgradeDoc = new Document()
                     .append("id", upgrade.getId())
@@ -118,6 +124,7 @@ public class MongoDBDatabase {
                     .append("description", upgrade.getDescription())
                     .append("limit", upgrade.getMaxLevel())
                     .append("costMultiplier", upgrade.getUpgradeCostMultiplier())
+                    .append("costMultiplierAdder", upgrade.getUpgradeCostMultiplierAdder())
                     .append("price", new Document()
                             .append("mantisa", upgrade.getPrice().getMantissa())
                             .append("exponent", upgrade.getPrice().getExponent()))
@@ -129,6 +136,39 @@ public class MongoDBDatabase {
             plugin.getLogger().severe("[MongoDB] Unable to create upgrade: " + e.getMessage());
         }
     }
+
+    public void updateUpgrade(Upgrade upgrade) {
+        Document existingDoc = upgradesCollection.find(Filters.eq("id", upgrade.getId())).first();
+
+        // Jei tokio įrašo nėra, tiesiog sukurk naują
+        if (existingDoc == null) {
+            return;
+        }
+
+        // Sukuriame naują dokumentą pagal dabartinę objekto būseną
+        Document newDoc = new Document()
+                .append("id", upgrade.getId())
+                .append("name", upgrade.getName())
+                .append("description", upgrade.getDescription())
+                .append("limit", upgrade.getMaxLevel())
+                .append("costMultiplier", upgrade.getUpgradeCostMultiplier())
+                .append("costMultiplierAdder", upgrade.getUpgradeCostMultiplierAdder())
+                .append("price", new Document()
+                        .append("mantisa", upgrade.getPrice().getMantissa())
+                        .append("exponent", upgrade.getPrice().getExponent()))
+                .append("options", upgrade.getUpgradeOptions().toDocument());
+
+        // Jei naujas dokumentas skiriasi nuo seno, atnaujink
+        if (!newDoc.equals(existingDoc)) {
+            try {
+                upgradesCollection.replaceOne(Filters.eq("id", upgrade.getId()), newDoc);
+                plugin.getLogger().info("[MongoDB] Upgrade updated: " + upgrade.getName());
+            } catch (Exception e) {
+                plugin.getLogger().severe("[MongoDB] Unable to update upgrade: " + e.getMessage());
+            }
+        }
+    }
+
 
     public void deleteUpgrade(Upgrade upgrade) {
         try {

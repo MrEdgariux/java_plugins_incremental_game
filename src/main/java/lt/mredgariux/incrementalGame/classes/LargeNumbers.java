@@ -69,7 +69,7 @@ public class LargeNumbers {
         return other;
     }
 
-    public LargeNumbers subtract(LargeNumbers other) {
+    public LargeNumbers subtractReturn(LargeNumbers other) {
         if (this.compareTo(other) <= 0) {
             return new LargeNumbers(0, 0);
         }
@@ -83,6 +83,24 @@ public class LargeNumbers {
             newExponent = other.exponent;
         }
         return new LargeNumbers(newMantissa, newExponent);
+    }
+
+    public void subtract(LargeNumbers other) {
+        if (this.compareTo(other) <= 0) {
+            this.mantissa = 0;
+            this.exponent = 0;
+        }
+        double newMantissa;
+        long newExponent = this.exponent;
+
+        if (this.exponent > other.exponent) {
+            newMantissa = this.mantissa - (other.mantissa / Math.pow(10, this.exponent - other.exponent));
+        } else {
+            newMantissa = (this.mantissa / Math.pow(10, other.exponent - this.exponent)) - other.mantissa;
+            newExponent = other.exponent;
+        }
+        this.mantissa = newMantissa;
+        this.exponent = newExponent;
     }
 
     public void multiply(double value) {

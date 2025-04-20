@@ -3,6 +3,7 @@ package lt.mredgariux.incrementalGame.classes.money.upgrades;
 import lt.mredgariux.incrementalGame.classes.LargeNumbers;
 import lt.mredgariux.incrementalGame.classes.game.Requirement;
 import org.bson.Document;
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 import org.json.simple.JSONObject;
 
@@ -18,6 +19,7 @@ public class Upgrade {
     private Requirement requirements;
     private long upgradeLevel = 0;
     private double upgradeCostMultiplier = 1.5;
+    private double upgradeCostMultiplierAdder = 1.01;
     private long upgradeLevelMax = -1; // (-1) Unlimited | (0) Disabled | (1 - Inf) Limit xD
 
     private final UpgradeOptions upgradeOptions;
@@ -30,6 +32,7 @@ public class Upgrade {
         private Requirement requirements;
         private long upgradeLevel = 0;
         private double upgradeCostMultiplier = 1.5;
+        private double upgradeCostMultiplierAdder = 1.01;
         private long upgradeLevelMax = -1; // Default: unlimited
         private UpgradeOptions upgradeOptions;
 
@@ -43,7 +46,7 @@ public class Upgrade {
             this.upgradeOptions = upgradeOptions;
         }
 
-        public Builder setUpgradeLevel(int upgradeLevel) {
+        public Builder setUpgradeLevel(long upgradeLevel) {
             this.upgradeLevel = upgradeLevel;
             return this;
         }
@@ -58,7 +61,12 @@ public class Upgrade {
             return this;
         }
 
-        public Builder setUpgradeLevelMax(int upgradeLevelMax) {
+        public Builder setUpgradeCostMultiplierAdder(double upgradeCostMultiplierAdder) {
+            this.upgradeCostMultiplierAdder = upgradeCostMultiplierAdder;
+            return this;
+        }
+
+        public Builder setUpgradeLevelMax(long upgradeLevelMax) {
             this.upgradeLevelMax = upgradeLevelMax;
             return this;
         }
@@ -78,6 +86,7 @@ public class Upgrade {
         this.requirements = builder.requirements;
         this.upgradeLevel = builder.upgradeLevel;
         this.upgradeCostMultiplier = builder.upgradeCostMultiplier;
+        this.upgradeCostMultiplierAdder = builder.upgradeCostMultiplierAdder;
         this.upgradeLevelMax = builder.upgradeLevelMax;
         this.upgradeOptions = builder.upgradeOptions;
     }
@@ -88,8 +97,11 @@ public class Upgrade {
         this.upgradeName = other.getName();
         this.upgradeDescription = other.getDescription();
         this.upgradePrice = new LargeNumbers(other.getPrice());
+        this.upgradeCostMultiplier = other.getUpgradeCostMultiplier();
+        this.upgradeCostMultiplierAdder = other.getUpgradeCostMultiplierAdder();
         this.requirements = other.getRequirements();
         this.upgradeLevel = other.getLevel();
+        this.upgradeLevelMax = other.getMaxLevel();
         this.upgradeOptions = new UpgradeOptions(other.getUpgradeOptions());
     }
 
@@ -114,12 +126,15 @@ public class Upgrade {
         return upgradeLevel;
     }
 
-    public void setLevel(int level) {
+    public void setLevel(long level) {
         upgradeLevel = level;
     }
 
     public boolean canBeUpgraded() {
-        return (this.upgradeLevel < this.upgradeLevelMax || this.upgradeLevelMax != 0 || upgradePrice.compareTo(new LargeNumbers(0, 0)) > 0);
+//        Bukkit.getLogger().info(this.upgradeName + " - " + this.upgradeLevel + " - " + this.upgradeLevelMax + " - " + this.upgradePrice.compareTo(new LargeNumbers(0, 0)));
+        if (this.upgradeLevelMax == 0) return false;
+        if (this.upgradeLevelMax != -1 && this.upgradeLevel >= this.upgradeLevelMax) return false;
+        return this.upgradePrice.compareTo(new LargeNumbers(0, 0)) >= 0;
     }
 
     public String getName() {
@@ -154,12 +169,33 @@ public class Upgrade {
         this.upgradeCostMultiplier = upgradeCostMultiplier;
     }
 
+    public double getUpgradeCostMultiplierAdder() {
+        return upgradeCostMultiplierAdder;
+    }
+
+    public void setUpgradeCostMultiplierAdder(double upgradeCostMultiplierAdder) {
+        this.upgradeCostMultiplierAdder = upgradeCostMultiplierAdder;
+    }
+
     public void increaseUpgradePrice() {
         upgradePrice.multiply(upgradeCostMultiplier);
     }
 
+    public void increaseUpgradeCostMultiplier() {
+        upgradeCostMultiplier *= this.getUpgradeCostMultiplierAdder();
+    }
+
     public UpgradeOptions getUpgradeOptions() {
         return upgradeOptions;
+    }
+
+    // Ok
+
+    public void reculcate() {
+        for (long i = 0; i <= this.upgradeLevel; i++) {
+            this.increaseUpgradePrice();
+            this.increaseUpgradeCostMultiplier();
+        }
     }
 
     public Document toDocument() {
@@ -173,6 +209,7 @@ public class Upgrade {
         doc.put("requirements", requirements.toDocument());
 
         doc.put("upgradeCostMultiplier", upgradeCostMultiplier);
+        doc.put("upgradeCostMultiplierAdder", upgradeCostMultiplierAdder);
         doc.put("levelMax", this.upgradeLevelMax);
         doc.put("level", this.upgradeLevel);
 
@@ -182,6 +219,7 @@ public class Upgrade {
     }
 
     public static Upgrade fromDocument(Document doc) {
+        Bukkit.getLogger().info(doc.toJson());
         String name = doc.getString("name");
         String description = doc.getString("description");
 
@@ -189,8 +227,9 @@ public class Upgrade {
         Requirement requirements = Requirement.fromDocument((Document) doc.get("requirements"));
 
         double upgradeCostMultiplier = doc.getDouble("upgradeCostMultiplier");
-        int levelMax = doc.getInteger("levelMax", -1);
-        int level = doc.getInteger("level", 0);
+        double upgradeCostMultiplierAdder = doc.getDouble("upgradeCostMultiplierAdder");
+        long levelMax = doc.getLong("levelMax");
+        long level = doc.getLong("level");
 
         UpgradeOptions upgradeOptionss = new UpgradeOptions();
         upgradeOptionss.fromDocument((Document) doc.get("options"));
@@ -200,6 +239,11 @@ public class Upgrade {
                 .setRequirements(requirements)
                 .setUpgradeLevel(level)
                 .setUpgradeCostMultiplier(upgradeCostMultiplier)
+                .setUpgradeCostMultiplierAdder(upgradeCostMultiplierAdder)
                 .build();
+    }
+
+    public String toString() {
+        return String.format("Name: %s | Description: %s | Level: %s | Price: %s | Upgrade Cost Multiplier: %s | Upgrade Cost Multiplier Adder: %s", upgradeName, upgradeDescription, upgradeLevel, upgradePrice, upgradeCostMultiplier, upgradeCostMultiplierAdder);
     }
 }

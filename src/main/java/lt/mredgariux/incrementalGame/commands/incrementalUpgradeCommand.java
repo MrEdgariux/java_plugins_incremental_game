@@ -17,8 +17,8 @@ import java.lang.instrument.IllegalClassFormatException;
 import java.util.List;
 
 public class incrementalUpgradeCommand implements CommandExecutor {
-    UpgradesFunction function = new UpgradesFunction();
     Plugin plugin = main.getPlugin(main.class);
+    UpgradesFunction function = ((main) plugin).upgradesFunction;
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String @NotNull [] args) {
         if (!(sender instanceof Player player)) {
@@ -34,6 +34,11 @@ public class incrementalUpgradeCommand implements CommandExecutor {
         }
 
         List<Upgrade> upgradeList = function.getUpgradeManager().getUpgradesForPlayer(plData);
+
+        if (upgradeList.isEmpty()) {
+            ChatManager.sendMessage(player, "&4Something went terribly wrong while loading upgrades... :(");
+            return false;
+        }
 
         if (args.length == 0) {
             for (Upgrade upgrade : upgradeList) {

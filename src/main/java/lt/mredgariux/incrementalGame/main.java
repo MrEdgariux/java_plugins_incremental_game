@@ -35,7 +35,7 @@ public final class main extends JavaPlugin implements Listener {
 
     MongoDBDatabase mongoDb;
 
-    UpgradesFunction upgradesFunction = new UpgradesFunction();
+    public UpgradesFunction upgradesFunction = new UpgradesFunction();
 
     @Override
     public void onEnable() {
@@ -53,7 +53,9 @@ public final class main extends JavaPlugin implements Listener {
             mongoDb.createUpgrade(new Upgrade.Builder("Money II", "Adds 2x money exponent", new LargeNumbers(2.5,1), new UpgradeOptions.Builder()
                     .setMoneyExponentalMultiplier(1)
                     .build()
-            ).build());
+            )
+                    .setUpgradeCostMultiplierAdder(1.5)
+                    .build());
 
             // Coming soon upgrades
 
@@ -140,7 +142,9 @@ public final class main extends JavaPlugin implements Listener {
                 }
 
                 Location l = new Location(Bukkit.getWorld("world"), 18,85,7);
-                packetManager.updateSign(l, playerData, "Balance", "", playerData.getMoney().toString());
+                packetManager.updateSign(l, playerData, "Money", "", playerData.getCurrency("money").toString());
+                packetManager.updateSign(l.subtract(0,1,0), playerData, "Coal", "", playerData.getCurrency("coal").toString());
+                
                 l = new Location(Bukkit.getWorld("world"), 17,85,7);
 
                 for (Upgrade upgrade : upgradesFunction.getUpgradeManager().getUpgradesForPlayer(playerData)){

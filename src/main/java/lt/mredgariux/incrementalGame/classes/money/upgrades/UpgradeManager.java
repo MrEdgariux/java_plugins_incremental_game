@@ -19,15 +19,18 @@ public class UpgradeManager {
     }
 
     public void loadUpgrades(List<Upgrade> upgradess) {
-        this.upgrades.addAll(upgradess);
-    }
-
-    public List<Upgrade> getUpgrades() {
-        return upgrades;
+        if (this.upgrades.addAll(upgradess)) {
+            Bukkit.getLogger().info("[Upgrade Manager] -> Loaded " + upgradess.size() + " upgrades. In total we have " + this.upgrades.size() + " upgrades");
+        } else {
+            Bukkit.getLogger().severe("[Upgrade Manager] -> Cannot load " + upgradess.size() + " upgrades...");
+        }
     }
 
     public List<Upgrade> getUpgradesForPlayer(PlayerData playerData) {
-
+        if (this.upgrades.isEmpty()) {
+            Bukkit.getLogger().severe("[Upgrade Manager] -> No upgrades loaded. Cannot proceed to the upgrade returning function.");
+            return null;
+        }
         // Gauti visų įsigytų patobulinimų ID
         Set<String> purchasedUpgradeIds = playerData.getPurchasedUpgrades().stream()
                 .map(Upgrade::getId)
@@ -102,6 +105,7 @@ public class UpgradeManager {
                     playerData.removeMoney(price);
                     userUpgrade.increaseLevel();
                     userUpgrade.increaseUpgradePrice();
+                    userUpgrade.increaseUpgradeCostMultiplier();
                 } else {
                     break;
                 }
@@ -139,6 +143,7 @@ public class UpgradeManager {
                     playerData.removeMoney(price);
                     newUpgrade.increaseLevel();
                     newUpgrade.increaseUpgradePrice();
+                    newUpgrade.increaseUpgradeCostMultiplier();
                 } else {
                     playerData.addUpgrade(newUpgrade);
                     return new UpgradeResult(newUpgrade, false, "Not enough money");
@@ -158,7 +163,7 @@ public class UpgradeManager {
             return 0; // Neturim pinigų net pirmai upgrade
         }
 
-        if (multiplier == 1.0) {
+        if (multiplier <= 0) {
             return Integer.MAX_VALUE; // Jei nėra kainos augimo, galima pirkti be ribojimų
         }
 
@@ -167,7 +172,8 @@ public class UpgradeManager {
         while (playerMoney.compareTo(upgradePrice) >= 0) {
             maxUpgrades++;
             playerMoney.subtract(upgradePrice);
-            upgradePrice.multiply(multiplier);
+            upgradePrice.multiply((multiplier * (maxUpgrades * 0.01 + 1)));
+//            Bukkit.getLogger().info("Upgrade: " + upgrade.getName() + " cost " + upgradePrice + " can be bought " + maxUpgrades + " times until now. " + playerMoney + " player money xD");
         }
 
         return maxUpgrades;

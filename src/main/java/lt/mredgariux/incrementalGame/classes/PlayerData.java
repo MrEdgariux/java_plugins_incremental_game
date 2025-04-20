@@ -87,7 +87,7 @@ public class PlayerData {
         if (money.compareTo(amount) <= 0) {
             money = new LargeNumbers(0, 0);
         } else {
-            money = money.subtract(amount);
+            money.subtract(amount);
         }
     }
 
@@ -121,7 +121,10 @@ public class PlayerData {
 
         List<Document> upgradesList = new ArrayList<>();
         for (Upgrade upgrade : this.upgrades) {
-            upgradesList.add(upgrade.toDocument());
+            Document upgradeDoc = new Document()
+                    .append("id", upgrade.getId())
+                    .append("level", upgrade.getLevel());
+            upgradesList.add(upgradeDoc);
         }
 
         doc.put("upgrades", upgradesList);
@@ -129,7 +132,7 @@ public class PlayerData {
     }
 
 
-    public boolean load(Document docData) {
+    public boolean load(Document docData, List<Upgrade> upgradesAvailable) {
         if (!docData.containsKey("userId")) return false;
 
         String userId = docData.getString("userId");
@@ -144,9 +147,18 @@ public class PlayerData {
 
         // Įkeliame visus patobulinimus
         for (Document upgradeDoc : upgradesList) {
-            Upgrade upgrade = Upgrade.fromDocument(upgradeDoc);
-            Bukkit.getLogger().info("[Player Data Loader] -> Loaded upgrade " + upgrade.getId() + " with level " + upgrade.getLevel() + " for player " + getPlayer().getName());
-            this.upgrades.add(upgrade);
+            Upgrade upgrade = upgradesAvailable.stream().filter(upg -> upg.getId().equals(upgradeDoc.getString("id"))).findFirst().orElse(null);
+            if (upgrade == null) {
+                Bukkit.getLogger().warning("[Player Data Loader] -> Upgrade does not exist anymore: " + upgradeDoc.getString("id") + " with level " + upgradeDoc.getString("level") + " for player " + getPlayer().getName());
+                continue;
+            }
+            Upgrade newUpgrade = new Upgrade(upgrade);
+            newUpgrade.setLevel(upgradeDoc.getLong("level"));
+            newUpgrade.reculcate();
+
+            Bukkit.getLogger().info("[Player Data Loader] -> Loaded upgrade " + newUpgrade.getId() + " with level " + newUpgrade.getLevel() + " for player " + getPlayer().getName());
+            Bukkit.getLogger().info(newUpgrade.toString());
+            this.upgrades.add(newUpgrade);
         }
 
         return true;
