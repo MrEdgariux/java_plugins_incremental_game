@@ -8,10 +8,8 @@ import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
-import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public class PlayerData {
@@ -59,9 +57,9 @@ public class PlayerData {
             }
         }
 
-        Bukkit.getLogger().info(incremental.getMantissa() + " " + incremental.getExponent());
+//        money.add(incremental);
 
-        money.add(incremental);
+        currency.money.add(incremental);
     }
 
 
@@ -117,7 +115,7 @@ public class PlayerData {
         Document doc = new Document();
         doc.put("userId", player.getUniqueId().toString());
 
-        doc.put("money", BasicFunctions.convertNumbers(this.getMoney()));
+        doc.put("currency", this.currency.toDocument());
 
         List<Document> upgradesList = new ArrayList<>();
         for (Upgrade upgrade : this.upgrades) {
@@ -138,9 +136,9 @@ public class PlayerData {
         String userId = docData.getString("userId");
 
         if (!this.player.getUniqueId().toString().equals(userId)) return false;
-        if (!docData.containsKey("money")) return false;
+        if (!docData.containsKey("currency")) return false;
 
-        this.money = LargeNumbers.fromDocument((Document) docData.get("money"));
+        this.currency = Currency.fromDocument((Document) docData.get("currency"));
 
         if (!docData.containsKey("upgrades")) return false;
         List<Document> upgradesList = docData.getList("upgrades", Document.class);

@@ -1,7 +1,12 @@
 name: IncrementalGame
-version: '1.0'
+version: '2.0'
 main: lt.mredgariux.incrementalGame.main
 api-version: '1.21'
 commands:
   upgrades:
-    description: aha
+    description: View or manage upgrades.
+  setloc:
+    description: Set the location of sign where player is looking at.
+    usage: /setloc <type>
+    permission: incrementalgame.setloc
+    permission-message: You do not have permission to set locations.

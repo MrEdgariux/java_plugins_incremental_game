@@ -2,12 +2,13 @@ package lt.mredgariux.incrementalGame.classes.money.upgrades;
 
 import lt.mredgariux.incrementalGame.classes.LargeNumbers;
 import lt.mredgariux.incrementalGame.classes.game.Requirement;
+import lt.mredgariux.incrementalGame.classes.money.Currency;
 import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
-import org.json.simple.JSONObject;
 
 import java.util.HashMap;
+import java.util.Map;
 
 public class Upgrade {
     private final String id;
@@ -15,7 +16,7 @@ public class Upgrade {
     private final String upgradeDescription;
 
     // Valiutos configas
-    private LargeNumbers upgradePrice;
+    private final Currency upgradePrice;
     private Requirement requirements;
     private long upgradeLevel = 0;
     private double upgradeCostMultiplier = 1.5;
@@ -28,31 +29,23 @@ public class Upgrade {
     public static class Builder {
         private final String upgradeName;
         private final String upgradeDescription;
-        private LargeNumbers upgradePrice;
-        private Requirement requirements;
+        private final Currency upgradePrice;
         private long upgradeLevel = 0;
         private double upgradeCostMultiplier = 1.5;
         private double upgradeCostMultiplierAdder = 1.01;
         private long upgradeLevelMax = -1; // Default: unlimited
-        private UpgradeOptions upgradeOptions;
+        private final UpgradeOptions upgradeOptions;
 
         // Constructor for required fields
-        public Builder(@NotNull String upgradeName, @NotNull String upgradeDescription, @NotNull LargeNumbers price, @NotNull UpgradeOptions upgradeOptions) {
+        public Builder(@NotNull String upgradeName, @NotNull String upgradeDescription, @NotNull Currency price, @NotNull UpgradeOptions upgradeOptions) {
             this.upgradeName = upgradeName;
             this.upgradeDescription = upgradeDescription;
             this.upgradePrice = price;
-            // TODO: Change this as soon as possible xD
-            this.requirements = new Requirement.Builder().setMoney(price).build();
             this.upgradeOptions = upgradeOptions;
         }
 
         public Builder setUpgradeLevel(long upgradeLevel) {
             this.upgradeLevel = upgradeLevel;
-            return this;
-        }
-
-        public Builder setRequirements(Requirement requirements) {
-            this.requirements = requirements;
             return this;
         }
 
@@ -83,7 +76,6 @@ public class Upgrade {
         this.upgradeName = builder.upgradeName;
         this.upgradeDescription = builder.upgradeDescription;
         this.upgradePrice = builder.upgradePrice;
-        this.requirements = builder.requirements;
         this.upgradeLevel = builder.upgradeLevel;
         this.upgradeCostMultiplier = builder.upgradeCostMultiplier;
         this.upgradeCostMultiplierAdder = builder.upgradeCostMultiplierAdder;
@@ -96,7 +88,7 @@ public class Upgrade {
         this.id = other.getId();
         this.upgradeName = other.getName();
         this.upgradeDescription = other.getDescription();
-        this.upgradePrice = new LargeNumbers(other.getPrice());
+        this.upgradePrice = new Currency(other.getPrice());
         this.upgradeCostMultiplier = other.getUpgradeCostMultiplier();
         this.upgradeCostMultiplierAdder = other.getUpgradeCostMultiplierAdder();
         this.requirements = other.getRequirements();
@@ -130,12 +122,27 @@ public class Upgrade {
         upgradeLevel = level;
     }
 
-    public boolean canBeUpgraded() {
-//        Bukkit.getLogger().info(this.upgradeName + " - " + this.upgradeLevel + " - " + this.upgradeLevelMax + " - " + this.upgradePrice.compareTo(new LargeNumbers(0, 0)));
+    public boolean canBeUpgraded(Currency playerCurrency) {
         if (this.upgradeLevelMax == 0) return false;
         if (this.upgradeLevelMax != -1 && this.upgradeLevel >= this.upgradeLevelMax) return false;
-        return this.upgradePrice.compareTo(new LargeNumbers(0, 0)) >= 0;
+
+        // Tikrinam ar turi pakankamai visų valiutų
+        for (Map.Entry<String, LargeNumbers> entry : this.upgradePrice.getAllCurrencies().entrySet()) {
+            LargeNumbers requiredAmount = entry.getValue();
+            if (requiredAmount.compareTo(new LargeNumbers(0, 0)) <= 0) {
+                continue; // jei kainos nėra arba 0 - ignoruojam
+            }
+
+            LargeNumbers playerAmount = playerCurrency.getCurrency(entry.getKey());
+
+            if (playerAmount.compareTo(requiredAmount) < 0) {
+                // jei neturi bent vienos valiutos pakankamai - neleidžiam upgrade
+                return false;
+            }
+        }
+        return true;
     }
+
 
     public String getName() {
         return upgradeName;
@@ -145,7 +152,7 @@ public class Upgrade {
         return upgradeDescription;
     }
 
-    public LargeNumbers getPrice() {
+    public Currency getPrice() {
         return upgradePrice;
     }
 
@@ -178,7 +185,13 @@ public class Upgrade {
     }
 
     public void increaseUpgradePrice() {
-        upgradePrice.multiply(upgradeCostMultiplier);
+        for (Map.Entry<String, LargeNumbers> entry : this.upgradePrice.getAllCurrencies().entrySet()) {
+            LargeNumbers currentPrice = entry.getValue();
+
+            if (currentPrice.compareTo(new LargeNumbers(0, 0)) <= 0) continue;
+
+            currentPrice.multiply(upgradeCostMultiplier);
+        }
     }
 
     public void increaseUpgradeCostMultiplier() {
@@ -206,7 +219,6 @@ public class Upgrade {
         doc.put("description", this.upgradeDescription);
 
         doc.put("price", this.upgradePrice.toDocument());
-        doc.put("requirements", requirements.toDocument());
 
         doc.put("upgradeCostMultiplier", upgradeCostMultiplier);
         doc.put("upgradeCostMultiplierAdder", upgradeCostMultiplierAdder);
@@ -224,7 +236,6 @@ public class Upgrade {
         String description = doc.getString("description");
 
         Document priceDoc = (Document) doc.get("price");
-        Requirement requirements = Requirement.fromDocument((Document) doc.get("requirements"));
 
         double upgradeCostMultiplier = doc.getDouble("upgradeCostMultiplier");
         double upgradeCostMultiplierAdder = doc.getDouble("upgradeCostMultiplierAdder");
@@ -234,9 +245,8 @@ public class Upgrade {
         UpgradeOptions upgradeOptionss = new UpgradeOptions();
         upgradeOptionss.fromDocument((Document) doc.get("options"));
 
-        return new Builder(name, description, LargeNumbers.fromDocument(priceDoc), upgradeOptionss)
+        return new Builder(name, description, Currency.fromDocument(priceDoc), upgradeOptionss)
                 .setUpgradeLevelMax(levelMax)
-                .setRequirements(requirements)
                 .setUpgradeLevel(level)
                 .setUpgradeCostMultiplier(upgradeCostMultiplier)
                 .setUpgradeCostMultiplierAdder(upgradeCostMultiplierAdder)

@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'lt.mredgariux'
-version = '1.0'
+version = '2.0'
 
 repositories {
     mavenCentral()
@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
     implementation("org.mongodb:mongodb-driver-sync:4.9.0")
 }
 

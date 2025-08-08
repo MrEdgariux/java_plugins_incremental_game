@@ -5,16 +5,17 @@ import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 import lt.mredgariux.incrementalGame.classes.LargeNumbers;
 import lt.mredgariux.incrementalGame.classes.PlayerData;
+import lt.mredgariux.incrementalGame.classes.money.Currency;
 import lt.mredgariux.incrementalGame.classes.money.upgrades.Upgrade;
 import lt.mredgariux.incrementalGame.classes.money.upgrades.UpgradeOptions;
 import org.bson.Document;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
-import org.json.simple.JSONObject;
 
 import javax.naming.ConfigurationException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class MongoDBDatabase {
     Plugin plugin = (Plugin) main.getPlugin(main.class);
@@ -93,7 +94,7 @@ public class MongoDBDatabase {
                 double costMultiplieradder = doc.getDouble("costMultiplierAdder");
 
                 Document priceDoc = (Document) doc.get("price");
-                LargeNumbers upgradePrice = new LargeNumbers(priceDoc.getDouble("mantisa"), priceDoc.getLong("exponent"));
+                Currency upgradePrice = Currency.fromDocument(priceDoc);
                 UpgradeOptions upgradeOptions = new UpgradeOptions();
                 upgradeOptions.fromDocument(doc.get("options", Document.class));
 
@@ -125,9 +126,7 @@ public class MongoDBDatabase {
                     .append("limit", upgrade.getMaxLevel())
                     .append("costMultiplier", upgrade.getUpgradeCostMultiplier())
                     .append("costMultiplierAdder", upgrade.getUpgradeCostMultiplierAdder())
-                    .append("price", new Document()
-                            .append("mantisa", upgrade.getPrice().getMantissa())
-                            .append("exponent", upgrade.getPrice().getExponent()))
+                    .append("price", upgrade.getPrice().toDocument())
                     .append("options", upgrade.getUpgradeOptions().toDocument());
 
             upgradesCollection.insertOne(upgradeDoc);
@@ -153,9 +152,7 @@ public class MongoDBDatabase {
                 .append("limit", upgrade.getMaxLevel())
                 .append("costMultiplier", upgrade.getUpgradeCostMultiplier())
                 .append("costMultiplierAdder", upgrade.getUpgradeCostMultiplierAdder())
-                .append("price", new Document()
-                        .append("mantisa", upgrade.getPrice().getMantissa())
-                        .append("exponent", upgrade.getPrice().getExponent()))
+                .append("price", upgrade.getPrice().toDocument())
                 .append("options", upgrade.getUpgradeOptions().toDocument());
 
         // Jei naujas dokumentas skiriasi nuo seno, atnaujink

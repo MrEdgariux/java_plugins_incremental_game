@@ -56,6 +56,72 @@ public class LargeNumbers {
         return exponent;
     }
 
+    // Normalizacija (kad mantissa būtų tarp 1 ir 10, o exponent atitinkamai pasikeistų)
+    private void normalize() {
+        if (mantissa == 0) {
+            exponent = 0;
+            return;
+        }
+        while (Math.abs(mantissa) >= 10) {
+            mantissa /= 10;
+            exponent++;
+        }
+        while (Math.abs(mantissa) < 1 && mantissa != 0) {
+            mantissa *= 10;
+            exponent--;
+        }
+    }
+
+    // ===== InPlace metodai =====
+    public void addInPlace(LargeNumbers other) {
+        if (other.mantissa == 0) return;
+
+        LargeNumbers temp = new LargeNumbers(other);
+        alignExponents(this, temp);
+        this.mantissa += temp.mantissa;
+        normalize();
+    }
+
+    public void subtractInPlace(LargeNumbers other) {
+        if (other.mantissa == 0) return;
+
+        LargeNumbers temp = new LargeNumbers(other);
+        alignExponents(this, temp);
+        this.mantissa -= temp.mantissa;
+        normalize();
+    }
+
+    public void multiplyInPlace(LargeNumbers other) {
+        if (this.mantissa == 0 || other.mantissa == 0) {
+            this.mantissa = 0;
+            this.exponent = 0;
+            return;
+        }
+        this.mantissa *= other.mantissa;
+        this.exponent += other.exponent;
+        normalize();
+    }
+
+    public void divideInPlace(LargeNumbers other) {
+        if (other.mantissa == 0) {
+            throw new ArithmeticException("Division by zero in LargeNumbers");
+        }
+        this.mantissa /= other.mantissa;
+        this.exponent -= other.exponent;
+        normalize();
+    }
+
+    // ===== Helperis exponentų suvienodinimui =====
+    private static void alignExponents(LargeNumbers a, LargeNumbers b) {
+        if (a.exponent > b.exponent) {
+            b.mantissa /= Math.pow(10, a.exponent - b.exponent);
+            b.exponent = a.exponent;
+        } else if (b.exponent > a.exponent) {
+            a.mantissa /= Math.pow(10, b.exponent - a.exponent);
+            a.exponent = b.exponent;
+        }
+    }
+
     public LargeNumbers add(LargeNumbers other) {
         if (this.exponent > other.exponent) {
             this.mantissa += other.mantissa / Math.pow(10, this.exponent - other.exponent);
@@ -139,6 +205,18 @@ public class LargeNumbers {
         return new LargeNumbers(resultMantissa.doubleValue(), newExponent);
     }
 
+    public LargeNumbers divide(LargeNumbers other) {
+        if (other.mantissa == 0) {
+            throw new ArithmeticException("Division by zero is not allowed.");
+        }
+
+        double newMantissa = this.mantissa / other.mantissa;
+        long newExponent = this.exponent - other.exponent;
+
+        return new LargeNumbers(newMantissa, newExponent);
+    }
+
+
     public LargeNumbers pow(long power) {
         if (power == 0) return new LargeNumbers(1, 0);
         if (power == 1) return new LargeNumbers(mantissa, exponent);
@@ -190,6 +268,14 @@ public class LargeNumbers {
             return String.format("%.2fE%d", mantissa, exponent);
         }
     }
+
+    public int toInt() {
+        double value = mantissa * Math.pow(10, exponent);
+        if (value > Integer.MAX_VALUE) return Integer.MAX_VALUE;
+        if (value < Integer.MIN_VALUE) return Integer.MIN_VALUE;
+        return (int) value;
+    }
+
 
     public Document toDocument() {
         Document newDocument = new Document();

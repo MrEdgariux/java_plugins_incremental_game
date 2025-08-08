@@ -2,13 +2,11 @@ package lt.mredgariux.incrementalGame.classes.money.upgrades;
 
 import lt.mredgariux.incrementalGame.classes.LargeNumbers;
 import lt.mredgariux.incrementalGame.classes.PlayerData;
+import lt.mredgariux.incrementalGame.classes.money.Currency;
 import org.bukkit.Bukkit;
 
 import java.lang.instrument.IllegalClassFormatException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class UpgradeManager {
@@ -36,13 +34,11 @@ public class UpgradeManager {
                 .map(Upgrade::getId)
                 .collect(Collectors.toSet());
 
-        // Pridėti įsigytus patobulinimus
         List<Upgrade> upgradesForPlayer = new ArrayList<>(playerData.getPurchasedUpgrades());
 
-        // Pridėti galimus įsigyti patobulinimus, bet tik jei jų dar neturi
         for (Upgrade upgrade : this.upgrades) {
             if (!purchasedUpgradeIds.contains(upgrade.getId())) {
-                if (!upgrade.canBeUpgraded()) continue;
+                if (!upgrade.canBeUpgraded(playerData.getCurrency())) continue;
                 upgradesForPlayer.add(upgrade);
             }
         }
@@ -59,7 +55,7 @@ public class UpgradeManager {
     }
 
     public UpgradeResult buyUpgrade(Upgrade upgrade, PlayerData playerData, int amount) throws IllegalClassFormatException {
-        // Patikrinam, atnaujinimas iš vis egzistuoja
+        // Patikrinam, ar tas upgrade egzistuoja
         boolean upgradeExistsInList = upgrades.stream()
                 .anyMatch(u -> u.getId().equals(upgrade.getId()));
 
@@ -67,113 +63,83 @@ public class UpgradeManager {
             return new UpgradeResult(upgrade, false, "Upgrade not found");
         }
 
-        // Patikrinam, ar žaidėjas jau turi šį upgrade
+        // Išsitraukiam jau turimą upgrade (jei turi)
         Optional<Upgrade> existingUpgrade = playerData.getPurchasedUpgrades().stream()
                 .filter(x -> x.getId().equals(upgrade.getId()))
                 .findFirst();
 
-        if (existingUpgrade.isPresent()) {
-            // Jei jau turi - redaguojam jo egzistuojančią kopiją
-            Upgrade userUpgrade = existingUpgrade.get();
-            if (!userUpgrade.canBeUpgraded()) {
-                return new UpgradeResult(userUpgrade, false, "Upgrade is at maximum, disabled or unknown error occurred");
-            }
+        Upgrade targetUpgrade = existingUpgrade.orElse(new Upgrade(upgrade));
 
-            LargeNumbers price = userUpgrade.getPrice();
-
-            if (price.compareTo(new LargeNumbers(0,0)) <= 0) {
-                return new UpgradeResult(userUpgrade, false, "Upgrade price is incorrect");
-            }
-
-            int possibleAmount = getPossibleUpgradeAmount(userUpgrade, playerData);
-            if (amount > possibleAmount) {
-                amount = possibleAmount;
-            }
-
-            if (amount == 0) {
-                return new UpgradeResult(userUpgrade, false, "Not enough money");
-            }
-
-            for (int i = 0; i < amount; i++) {
-                if (!userUpgrade.canBeUpgraded()) {
-                    return new UpgradeResult(userUpgrade, false, "Upgrade is at maximum level.");
-                }
-
-                int results = playerData.getMoney().compareTo(price);
-
-                if (results >= 0) {
-                    playerData.removeMoney(price);
-                    userUpgrade.increaseLevel();
-                    userUpgrade.increaseUpgradePrice();
-                    userUpgrade.increaseUpgradeCostMultiplier();
-                } else {
-                    break;
-                }
-            }
-
-            return new UpgradeResult(userUpgrade, true);
-        } else {
-            // Jei neturi - sukuriam NAUJĄ kopiją ir pridedam žaidėjui
-            Upgrade newUpgrade = new Upgrade(upgrade);
-
-            if (!newUpgrade.canBeUpgraded()) {
-                return new UpgradeResult(newUpgrade, false, "Upgrade is at maximum, disabled or unknown error occurred");
-            }
-
-            LargeNumbers price = newUpgrade.getPrice();
-            if (price.compareTo(new LargeNumbers(0,0)) <= 0) {
-                return new UpgradeResult(newUpgrade, false, "Upgrade price is incorrect");
-            }
-
-            int possibleAmount = getPossibleUpgradeAmount(newUpgrade, playerData);
-            if (amount > possibleAmount) {
-                amount = possibleAmount;
-            }
-
-            if (amount == 0) {
-                return new UpgradeResult(newUpgrade, false, "Not enough money");
-            }
-
-            for (int i = 0; i < amount; i++) {
-                if (!newUpgrade.canBeUpgraded()) {
-                    return new UpgradeResult(newUpgrade, false, "Upgrade cannot be upgraded.");
-                }
-
-                if (playerData.getMoney().compareTo(price) >= 0) {
-                    playerData.removeMoney(price);
-                    newUpgrade.increaseLevel();
-                    newUpgrade.increaseUpgradePrice();
-                    newUpgrade.increaseUpgradeCostMultiplier();
-                } else {
-                    playerData.addUpgrade(newUpgrade);
-                    return new UpgradeResult(newUpgrade, false, "Not enough money");
-                }
-            }
-            playerData.addUpgrade(newUpgrade);
-            return new UpgradeResult(newUpgrade, true);
+        if (!targetUpgrade.canBeUpgraded(playerData.getCurrency())) {
+            return new UpgradeResult(targetUpgrade, false, "Upgrade is at maximum, disabled or unknown error occurred");
         }
+
+        // Kiek realiai gali įsigyti
+        int possibleAmount = getPossibleUpgradeAmount(targetUpgrade, playerData);
+        amount = Math.min(amount, possibleAmount);
+
+        if (amount <= 0) {
+            return new UpgradeResult(targetUpgrade, false, "Not enough currency");
+        }
+
+        for (int i = 0; i < amount; i++) {
+            if (!targetUpgrade.canBeUpgraded(playerData.getCurrency())) {
+                break;
+            }
+
+            Currency price = targetUpgrade.getPrice();
+
+            // Patikrinam ar užtenka VISŲ valiutų
+            boolean canAfford = price.getAllCurrencies().entrySet().stream()
+                    .allMatch(entry -> playerData.getCurrency().getCurrency(entry.getKey())
+                            .compareTo(entry.getValue()) >= 0);
+
+            if (!canAfford) {
+                break;
+            }
+
+            // Atimam VISAS kainas
+            for (Map.Entry<String, LargeNumbers> entry : price.getAllCurrencies().entrySet()) {
+                if (entry.getValue().compareTo(new LargeNumbers(0, 0)) > 0) {
+                    playerData.getCurrency().getCurrency(entry.getKey())
+                            .subtractInPlace(entry.getValue());
+                }
+            }
+
+            targetUpgrade.increaseLevel();
+            targetUpgrade.increaseUpgradePrice();
+            targetUpgrade.increaseUpgradeCostMultiplier();
+        }
+
+        // Jei tai naujas upgrade – pridedam prie žaidėjo sąrašo
+        if (existingUpgrade.isEmpty()) {
+            playerData.addUpgrade(targetUpgrade);
+        }
+
+        return new UpgradeResult(targetUpgrade, true);
     }
 
+
     public int getPossibleUpgradeAmount(Upgrade upgrade, PlayerData playerData) {
-        LargeNumbers playerMoney = new LargeNumbers(playerData.getMoney());
-        LargeNumbers upgradePrice = new LargeNumbers(upgrade.getPrice());
-        double multiplier = upgrade.getUpgradeCostMultiplier();
-
-        if (playerMoney.compareTo(upgradePrice) < 0) {
-            return 0; // Neturim pinigų net pirmai upgrade
+        if (upgrade == null || playerData == null) {
+            return 0;
         }
 
-        if (multiplier <= 0) {
-            return Integer.MAX_VALUE; // Jei nėra kainos augimo, galima pirkti be ribojimų
-        }
+        Currency currencies = upgrade.getPrice();
+        Currency playerCurrency = new Currency(playerData.getCurrency());
+        int maxUpgrades = Integer.MAX_VALUE;
 
-        int maxUpgrades = 0;
+        for (Map.Entry<String, LargeNumbers> entry : currencies.getAllCurrencies().entrySet()) {
+            String currencyType = entry.getKey();
+            LargeNumbers price = entry.getValue();
+            if (price.compareTo(new LargeNumbers(0, 0)) <= 0) continue;
 
-        while (playerMoney.compareTo(upgradePrice) >= 0) {
-            maxUpgrades++;
-            playerMoney.subtract(upgradePrice);
-            upgradePrice.multiply((multiplier * (maxUpgrades * 0.01 + 1)));
-//            Bukkit.getLogger().info("Upgrade: " + upgrade.getName() + " cost " + upgradePrice + " can be bought " + maxUpgrades + " times until now. " + playerMoney + " player money xD");
+            int possibleAmount = playerCurrency.getCurrency(currencyType)
+                    .divide(price)
+                    .toInt();
+            if (possibleAmount < maxUpgrades) {
+                maxUpgrades = possibleAmount;
+            }
         }
 
         return maxUpgrades;
